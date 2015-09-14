@@ -1,4 +1,5 @@
-#lang racket
+#lang racket/gui
+(require racket/gui/base)
 (define (parse-number s)
   (cond
    [(equal? "1" s) 1]
@@ -48,13 +49,17 @@
 (newline)
 (define n1 (create-node 1))
 (define nodes null)
-(for ([i (in-range -10 11)])
+(for ([i (in-range 0 10)])
      (set! nodes (cons (get-relative-node n1 i i i) nodes))
+     
      (set-payload (first nodes) i)
      )
-(for ([i (in-range -10 11)])
-     (printf ">> ~a\n" (get-payload (get-relative-node n1 i i i)))
-     )
+(define n5 (get-parent (get-parent (get-parent n1))))
+(define n6 (get-relative-node n5 5 2 2))
+(set-payload n6 1)
+;(for ([i (in-range -10 11)])
+;     (printf ">> ~a\n" (get-payload (get-relative-node n1 i i i)))
+					;     )
 (define n2 (get-relative-node n1 10 2 3))
 (define n3 (get-relative-node n2 -10 -2 -3))
 (define n4 (get-relative-node n1 0 0 0))
@@ -65,7 +70,7 @@
      (printf ">> ~a ~a\n" (int-div i 2) (quotient i 2)))
 
 (define (render-node node size f x y z)
-  (let ((s (* size 0.5)))
+  (let ((s (/ size 2)))
     (for ([i (in-range 8)])
 	 (when (has-child-node node i)
 	       (let ((ly (bitwise-bit-field i 1 2))
@@ -86,9 +91,49 @@
      (set! top-parent (get-parent top-parent)))
 (has-parent top-parent)
 
-(render-node top-parent 1.0 
+(render-node top-parent 100 
 	     (lambda (node x y z s) 
 	       (unless (null? (get-payload node))
-		       (print (list x y z s (get-payload node)))
-		       (newline)))
+		       (printf "~a ~a\n" s (get-payload node))))
 	     0 0 0)
+
+(define tile (read-bitmap "tile.png"))
+(define frame (new frame% [label "Example"] [width 512] [height 512]))
+(define (iso-offset x y z)
+  (values (+ x z)
+	  (- y (/ x 2) (/ z 2))))
+  
+;(define msg (new message% [parent frame]))
+
+(define my-canvas%
+  (class canvas% ; The base class is canvas%
+    ; Define overriding method to handle mouse events
+ ;   (define/override (on-event event)
+ ;     (send msg set-label "Canvas mouse"))
+    ; Define overriding method to handle keyboard events
+ ;   (define/override (on-char event)
+ ;     (send msg set-label "Canvas keyboard"))
+    ; Call the superclass init, passing on all init args
+    (super-new)))
+ 
+(new my-canvas% [parent frame]
+     [paint-callback
+      (lambda (canvas dc)
+	(send dc set-brush (send the-brush-list find-or-create-brush 
+				 (make-object color% 0 0 0 1.0) 'solid))
+	;(let-values ([(x y) (send canvas get-size)])
+	(let ((x 480) (y 240))
+	;(send canvas set-canvas-background (make-object color% 255 0 0 0))
+	  (render-node top-parent (max x y)
+		       (lambda (node x y z s) 
+			 (let-values ([(nx ny) (iso-offset x y z)])
+			   (unless (null? (get-payload node))
+				   (print (list nx ny))
+				   (newline)
+				   (send dc draw-bitmap tile nx ny))))
+		       0 0 0)
+	  )
+	;(send dc draw-text "Dont panic" 0 0)
+	)])
+
+(send frame show #t)
