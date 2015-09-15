@@ -49,9 +49,12 @@
 (newline)
 (define n1 (create-node 1))
 (define nodes null)
-(for ([i (in-range 0 10)])
-     (set! nodes (cons (get-relative-node n1 i i i) nodes))
-     
+(for ([i (in-range -5 5)])
+     (set! nodes (cons (get-relative-node n1 i 0 0) nodes))
+     (set-payload (first nodes) i)
+     (set! nodes (cons (get-relative-node n1 0 0 i) nodes))
+     (set-payload (first nodes) i)
+     (set! nodes (cons (get-relative-node n1 0 i 0) nodes))
      (set-payload (first nodes) i)
      )
 (define n5 (get-parent (get-parent (get-parent n1))))
@@ -60,7 +63,7 @@
 ;(for ([i (in-range -10 11)])
 ;     (printf ">> ~a\n" (get-payload (get-relative-node n1 i i i)))
 					;     )
-(define n2 (get-relative-node n1 10 2 3))
+(define n2 (get-relative-node n1 1 0 0))
 (define n3 (get-relative-node n2 -10 -2 -3))
 (define n4 (get-relative-node n1 0 0 0))
 (print (equal? n1 n3)) 
@@ -82,13 +85,54 @@
 		   (f (get-child-node node i) nx ny nz s)
 		   (render-node (get-child-node node i) s f nx ny nz)))))))
 
+;; Calculate the position relative to the parent node
+ (define (get-parent-offset node s p)
+   (let ((idx (get-node-index node))
+	 (parent (get-parent node)))
+     (let ((ly (bitwise-bit-field idx 1 2))
+ 	  (lx (bitwise-bit-field idx 0 1))
+ 	  (lz (bitwise-bit-field idx 2 3)))
+       (let ((rx  (* s (- lx 1)))
+	     (ry  (* s (- ly 1)))
+	     (rz  (* s (- lz 1))))
+	 (if (equal? parent p)
+	     (values rx ry rz)
+	     (let-values ([(px py pz) (get-parent-offset parent (* s 2) p)])
+	       (values (+ rx px) (+ ry py) (+ rz pz))))))))
+	     
+(define (get-parent-tree node)
+  (cons node
+	(if (has-parent node)
+	    (get-parent-tree (get-parent node))
+	    null)))
+      
 
-(define top-parent n1)
-(for ([i (in-naturals)]
-      #:break (not (has-parent top-parent)))
-     (print (has-parent top-parent))
-     (newline)
-     (set! top-parent (get-parent top-parent)))
+(define (find-common-parent nodea nodeb)
+  (let ((ta (reverse (get-parent-tree nodea)))
+	(tb (reverse (get-parent-tree nodeb))))
+    (for/last ([a ta]
+	       [b tb]
+	       #:when (equal? a b))
+	      a)))
+(find-common-parent n1 n2)
+
+(define na (create-node 1))
+(define nb (get-relative-node na 1 0 0))
+(let-values ([(x y z) (get-parent-offset na 1 (find-common-parent na nb))])
+  (print (list x y z)))
+(let-values ([(x y z) (get-parent-offset na 1 (find-common-parent na nb))])
+  (print (list x y z)))
+(newline)
+(exit)
+    
+
+;(define (node-offset nodea nodeb)
+(get-parent-tree n1)	      
+    
+(define top-parent  (last (get-parent-tree n1)))
+(print top-parent)
+;(exit)
+
 (has-parent top-parent)
 
 (render-node top-parent 100 
@@ -96,13 +140,21 @@
 	       (unless (null? (get-payload node))
 		       (printf "~a ~a\n" s (get-payload node))))
 	     0 0 0)
+;; Base item size should never change as this will decrease visual quality.
+;; Since its isometric there is a mismatch between the way stuff is understood
+;; and the way it is rendered.
+;; To fix this, an offset can be attached to each tile sprite.
+;; That offset can be used for sprites that are smaller or larger than their designated cube.
+;; Note that most things are bigger than their designated cubes
 
-(define tile (read-bitmap "tile.png"))
-(define frame (new frame% [label "Example"] [width 512] [height 512]))
 (define (iso-offset x y z)
   (values (+ x z)
-	  (- y (/ x 2) (/ z 2))))
-  
+	  (- (/ z 2) y (/ x 2) )))
+(struct sprite
+	(image x y))
+
+(define tile (sprite (read-bitmap "tile.png") 0 -5))
+(define frame (new frame% [label "Example"] [width 512] [height 512]))  
 ;(define msg (new message% [parent frame]))
 
 (define my-canvas%
@@ -119,18 +171,19 @@
 (new my-canvas% [parent frame]
      [paint-callback
       (lambda (canvas dc)
-	(send dc set-brush (send the-brush-list find-or-create-brush 
-				 (make-object color% 0 0 0 1.0) 'solid))
+	;(send dc set-brush (send the-brush-list find-or-create-brush 
+	;			 (make-object color% 0 0 0 1.0) 'solid))
 	;(let-values ([(x y) (send canvas get-size)])
-	(let ((x 480) (y 240))
-	;(send canvas set-canvas-background (make-object color% 255 0 0 0))
-	  (render-node top-parent (max x y)
+	(let ((x 1024) (y 1024))
+			       ;(send canvas set-canvas-background (make-object color% 255 0 0 0))
+	  (render-node (get-parent (get-parent (get-parent (get-parent (get-parent n1))))) (max x y)
 		       (lambda (node x y z s) 
 			 (let-values ([(nx ny) (iso-offset x y z)])
 			   (unless (null? (get-payload node))
-				   (print (list nx ny))
-				   (newline)
-				   (send dc draw-bitmap tile nx ny))))
+				   (printf "(~a ~a ~a) -> (~a ~a)\n" x y z nx ny)
+				   ;(send dc draw-rectangle nx (+ ny 512) s s)
+				   (send dc draw-bitmap (sprite-image tile) 
+					 (+ nx 0 (sprite-x tile)) (+ ny (sprite-y tile) 512)))))
 		       0 0 0)
 	  )
 	;(send dc draw-text "Dont panic" 0 0)
