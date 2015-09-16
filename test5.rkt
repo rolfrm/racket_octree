@@ -114,32 +114,7 @@
 	       [b tb]
 	       #:when (equal? a b))
 	      a)))
-(find-common-parent n1 n2)
 
-(define na (create-node 1))
-(define nb (get-relative-node na 1 0 0))
-(let-values ([(x y z) (get-parent-offset na 1 (find-common-parent na nb))])
-  (print (list x y z)))
-(let-values ([(x y z) (get-parent-offset na 1 (find-common-parent na nb))])
-  (print (list x y z)))
-(newline)
-(exit)
-    
-
-;(define (node-offset nodea nodeb)
-(get-parent-tree n1)	      
-    
-(define top-parent  (last (get-parent-tree n1)))
-(print top-parent)
-;(exit)
-
-(has-parent top-parent)
-
-(render-node top-parent 100 
-	     (lambda (node x y z s) 
-	       (unless (null? (get-payload node))
-		       (printf "~a ~a\n" s (get-payload node))))
-	     0 0 0)
 ;; Base item size should never change as this will decrease visual quality.
 ;; Since its isometric there is a mismatch between the way stuff is understood
 ;; and the way it is rendered.
@@ -150,6 +125,19 @@
 (define (iso-offset x y z)
   (values (+ x z)
 	  (- (/ z 2) y (/ x 2) )))
+
+
+(define na (create-node 1))
+(define nb (get-relative-node na 1 0 0))
+(let-values ([(x y z) (get-parent-offset na 1 (find-common-parent na nb))])
+  (print (iso-offset x y z)))
+(let-values ([(x y z) (get-parent-offset nb 1 (find-common-parent na nb))])
+  (print (iso-offset x y z)))
+
+(newline)
+(exit)
+
+
 (struct sprite
 	(image x y))
 
