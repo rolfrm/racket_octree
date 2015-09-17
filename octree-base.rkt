@@ -39,7 +39,7 @@
 (define (get-parent item)
   (if (null? (node-parent item))
       (let ((new-parent (node (make-vector 8 null) null null)))
-	(vector-set! (node-sub-nodes new-parent) (random 8) (make-weak-box item))
+	(vector-set! (node-sub-nodes new-parent) (* 7 (random 2)) (make-weak-box item))
 	(set-node-parent! item new-parent)
 	new-parent)
       (node-parent item)))
