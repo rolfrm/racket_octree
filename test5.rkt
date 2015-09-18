@@ -131,6 +131,7 @@
 (set-payload n1 tile) 
 (render-node p1 1 (lambda (node x y z s) (printf "~a\n" (list x y z s (get-payload node))))
 	     0 0 0)
+
 ;(exit)
 (new my-canvas% [parent frame]
      [paint-callback
