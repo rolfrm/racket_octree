@@ -9,6 +9,7 @@
 (parse-number "1")
 
 (require "octree-base.rkt")
+(require "vec3.rkt")
 
 (define (get-node-index n)
   (let ((parent (get-parent n)))
@@ -22,57 +23,50 @@
 (define (int-div x y)
   (floor (/ x y)))
 
-(define (get-relative-node node x y z)
+(define (index-to-offset idx)
+  (let ((lx (bitwise-bit-field idx 0 1))
+	(ly (bitwise-bit-field idx 1 2))
+	(lz (bitwise-bit-field idx 2 3)))
+    (vec3 lx ly lz)))
+
+(define (offset-to-index offset)
+  (+ (vec3-x offset) (* (vec3-y offset) 2) (* (vec3-z offset) 4)))
+
+(define (get-relative-node node v)
   (let ((idx (get-node-index node)))
-    (let ((ly (bitwise-bit-field idx 1 2))
-	  (lx (bitwise-bit-field idx 0 1))
-	  (lz (bitwise-bit-field idx 2 3))
+    (let ((vi (index-to-offset idx))
 	  (parent (get-parent node)))
-      (let ((nx (int-div (+ x lx) 2))
-	    (ny (int-div (+ y ly) 2))
-	    (nz (int-div (+ z lz) 2)))
-	(let ((nparent (if (and (eq? nx 0) (eq? ny 0) (eq? nz 0))
+      (let ((n (vec3-apply int-div (list (vec3+ vi v) (vec3 2 2 2)))))
+	(let ((nparent (if (and (eq? (vec3-x n) 0) (eq? (vec3-y n) 0) (eq? (vec3-z n) 0))
 			   parent
-			   (get-relative-node parent nx ny nz))))
-	  (let ((l2x (bitwise-and (+ lx x) 1))
-		(l2y (bitwise-and (+ ly y) 1))
-		(l2z (bitwise-and (+ lz z) 1)))
-	    (let ((nidx (+ l2x (* l2y 2) (* l2z 4))))
-	      (get-child-node nparent nidx))))))))
-(define (render-node node size f (x 0) (y 0) (z 0))
-  (f node x y z size)
+			   (get-relative-node parent n))))
+	  (let ((l2 (vec3-apply bitwise-and (list (vec3+ n vi) (vec3 1 1 1)))))
+	    (get-child-node nparent (offset-to-index l2))))))))
+
+
+(define (render-node node size f (v (vec3 0 0 0)))
+  (f node v size)
   (let ((s (/ size 2)))
     ;;it: xz: (1 0) (0 0) (1 1) (1 0)
     ;;        1     0     5     4
     ;;        3     2     7     6
     (for ([i '(1 0 5 4 3 2 7 6)])
 	 (when (has-child-node node i)
-	       (let (		     
-		     (lx (bitwise-bit-field i 0 1))
-		     (ly (bitwise-bit-field i 1 2))
-		     (lz (bitwise-bit-field i 2 3))
-		     )
-		 (let ((nx (+ x (* lx s)))
-		       (ny (+ y (* ly s)))
-		       (nz (+ z (* lz s))))
-		   (render-node (get-child-node node i) s f nx ny nz)
-		   
-		   ))))))
+	       (let* ((v2 (index-to-offset i))
+		      (v3 (vec3+ v (vec3* v2 (vec3 s s s)))))
+		 (render-node (get-child-node node i) s f v3)
+		 )))))
 
-;; Calculate the position relative to the parent node
- (define (get-parent-offset node s p)
-   (let ((idx (get-node-index node))
-	 (parent (get-parent node)))
-     (let ((ly (bitwise-bit-field idx 1 2))
- 	  (lx (bitwise-bit-field idx 0 1))
- 	  (lz (bitwise-bit-field idx 2 3)))
-       (let ((rx  (* s lx -1))
-	     (ry  (* s ly -1))
-	     (rz  (* s lz -1)))
-	 (if (equal? parent p)
-	     (values rx ry rz)
-	     (let-values ([(px py pz) (get-parent-offset parent (* s 2) p)])
-	       (values (+ px rx) (+ py ry) (+ pz rz))))))))
+;; Calculate the position relative to the parent node p
+(define (get-parent-offset node s p)
+  (let* ((idx (get-node-index node))
+	 (parent (get-parent node))
+	 (l (index-to-offset idx))
+	 (r (vec3-apply (lambda (x y) (* x s -1)) (list l (vec3 0 0 0)))))
+    (if (equal? parent p)
+	r
+	(let ((pv (get-parent-offset parent (* s 2) p)))
+	  (vec3+ pv r)))))
 
 (define (get-parent-tree node)
   (cons node
@@ -95,9 +89,10 @@
 ;; That offset can be used for sprites that are smaller or larger than their designated cube.
 ;; Note that most things are bigger than their designated cubes
 
-(define (iso-offset x y z)
-  (values (+ x z)
-	  (- (/ z 2) (+ y (/ x 2)) )))
+(define (iso-offset o)
+  (vec3 (+ (vec3-x o) (vec3-z o))
+	(- (/ (vec3-z o) 2) (+ (vec3-y o) (/ (vec3-x o) 2)))
+	0))
 
 (define frame (new frame% [label "Example"] [width 512] [height 512]))  
 ;(define msg (new message% [parent frame]))
@@ -123,7 +118,8 @@
 ; If it has a visual it will have a sprite attached
 (struct entity (position size))
 
-
+;(define (to-parent-coords node coord)
+  
 
 ;; (define (add-entity node position size)
 ;;   ;; Adds a new entity to the scene.
@@ -134,11 +130,12 @@
 ;; 	(set-payload node (cons (get-payload node) (entity (map (lambda (x) (- x (floor x))) position) size)))
 ;; 	new-node))
 ;;   )
-;; (exit 0)
+
 
 (define p1 (create-node))
 (define p2 (get-child-node p1 0))
 (define p3 (get-child-node p1 4))
+
 (set-payload p3 tile3)
 (define p4 (get-child-node p2 0))
 (set-payload p4 tile2)
@@ -147,33 +144,41 @@
 (define p5 (get-child-node p2 0))
 (define n1 (get-child-node p5 2))
 (set-payload n1 tile) 
-(render-node p1 1 (lambda (node x y z s) (printf "~a\n" (list x y z s (get-payload node))))
-	     0 0 0)
-(define p32 (get-relative-node p3 1 0 0))
+
+(render-node p1 1 
+	     (lambda (node xyz s) (printf "~a\n" (list xyz s (get-payload node)))))
+
+(define p32 (get-relative-node p3 (vec3 1 0 0)))
 (set-payload p32 tile3)
-(define p33 (get-relative-node p3 1 0 -1))
+(define p33 (get-relative-node p3 (vec3 1 0 -1)))
 (set-payload p33 tile3)
+
+(printf "~a\n" (iso-offset (vec3 1 2 3)))
+(printf "~a\n" (get-parent-offset n1 24 p1))
+
+;(exit)
 
 (new my-canvas% [parent frame]
      [paint-callback
       (lambda (canvas dc)
 	(send dc set-brush (send the-brush-list find-or-create-brush 
 				 (make-object color% 0 0 0 0.2) 'transparent))
-
-	(let ((p (get-parent (get-parent (get-parent (get-parent (get-parent (get-parent n1))))))))
-	  (let-values ([(px py pz) (get-parent-offset n1 24 p)])
-	    (let-values ([(ox oy) (iso-offset px py pz)])
-	    	      (render-node p (* 24 2 2 2 2 2 2)
-			   (lambda (node x y z s) 
-			     (let-values ([(nx ny) (iso-offset (+ x px) (+ y py) (+ z pz))])
-			       (let ((tile (get-payload node)))
-				 (unless (null? tile)
-					 (send dc draw-bitmap (sprite-image tile) 
-					       (+ nx (sprite-x tile) 200) (+ ny (sprite-y tile) 200))
-					 )))))
-	    )))
+	(let* ((p (get-parent (get-parent (get-parent (get-parent (get-parent (get-parent n1)))))))
+	       (pv (get-parent-offset n1 24 p))
+	       (o (iso-offset pv)))
+	  (render-node p (* 24 2 2 2 2 2 2)
+		       (lambda (node xyz s) 
+			 (let ((im-v (iso-offset (vec3+ xyz pv)))
+			       (tile (get-payload node)))
+			   (unless (null? tile)
+				   (send dc draw-bitmap (sprite-image tile) 
+					 (+ (vec3-x im-v)  (sprite-x tile) 200) 
+					 (+ (vec3-y im-v) (sprite-y tile) 200))
+				   )))
+	    )
+	  ))
 	;(send dc draw-text "Dont panic" 0 0)
-	)])
+	])
 
 
 
