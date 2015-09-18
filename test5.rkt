@@ -36,11 +36,13 @@
   (let ((idx (get-node-index node)))
     (let ((vi (index-to-offset idx))
 	  (parent (get-parent node)))
-      (let ((n (vec3-apply int-div (list (vec3+ vi v) (vec3 2 2 2)))))
-	(let ((nparent (if (and (eq? (vec3-x n) 0) (eq? (vec3-y n) 0) (eq? (vec3-z n) 0))
+      (let ((n (vec3-fold int-div (list (vec3+ vi v) (vec3 2 2 2)))))
+	(let ((nparent (if (and (eq? (vec3-x n) 0) 
+				(eq? (vec3-y n) 0) 
+				(eq? (vec3-z n) 0))
 			   parent
 			   (get-relative-node parent n))))
-	  (let ((l2 (vec3-apply bitwise-and (list (vec3+ n vi) (vec3 1 1 1)))))
+	  (let ((l2 (vec3-fold bitwise-and (list (vec3+ v vi) (vec3 1 1 1)))))
 	    (get-child-node nparent (offset-to-index l2))))))))
 
 
@@ -59,14 +61,16 @@
 
 ;; Calculate the position relative to the parent node p
 (define (get-parent-offset node s p)
-  (let* ((idx (get-node-index node))
-	 (parent (get-parent node))
-	 (l (index-to-offset idx))
-	 (r (vec3-apply (lambda (x y) (* x s -1)) (list l (vec3 0 0 0)))))
-    (if (equal? parent p)
-	r
-	(let ((pv (get-parent-offset parent (* s 2) p)))
-	  (vec3+ pv r)))))
+  (if (eq? node p)
+      (vec3 0 0 0)
+      (let* ((idx (get-node-index node))
+	     (parent (get-parent node))
+	     (l (index-to-offset idx))
+	     (r (vec3-apply (lambda (x) (* x s -1)) l)))
+	(if (equal? parent p)
+	    r
+	    (let ((pv (get-parent-offset parent (* s 2) p)))
+	      (vec3+ pv r))))))
 
 (define (get-parent-tree node)
   (cons node
@@ -91,7 +95,7 @@
 
 (define (iso-offset o)
   (vec3 (+ (vec3-x o) (vec3-z o))
-	(- (/ (vec3-z o) 2) (+ (vec3-y o) (/ (vec3-x o) 2)))
+	(- (/ (vec3-z o) 2) (vec3-y o) (/ (vec3-x o) 2))
 	0))
 
 (define frame (new frame% [label "Example"] [width 512] [height 512]))  
@@ -118,21 +122,40 @@
 ; If it has a visual it will have a sprite attached
 (struct entity (position size))
 
-;(define (to-parent-coords node coord)
+(define (to-parent-coords node coords)
+  (let ((offset (index-to-offset (get-node-index node))))
+    (vec3-apply (lambda (x) (/ x 2))  (vec3- offset coords))))
+
+(define (to-parent-size size)
+  (vec3/ size (vec3 2 2 2)))
   
 
-;; (define (add-entity node position size)
-;;   ;; Adds a new entity to the scene.
-;;   ;; movies it to the appropiate level of detail.
-;;   (if (ormap (lambda (x) (> x 1)) size)
-;;       (add-entity (get-parent node) (to-parent-coords position) (to-parent-size size))
-;;       (let ((new-node (apply relative-node node (map #'floor position))))
-;; 	(set-payload node (cons (get-payload node) (entity (map (lambda (x) (- x (floor x))) position) size)))
-;; 	new-node))
-;;   )
+(define (add-entity node position size)
+  ;; Adds a new entity to the scene.
+  ;; movies it to the appropiate level of detail.
+  (let ((size-values (vec3-values size)))
+    (if (ormap (lambda (x) (> x 1)) size-values)
+      (add-entity (get-parent node) (to-parent-coords node position) (to-parent-size size))
+      (if (andmap (lambda (x) (<= x 0.5)) size-values)
+	  (add-entity (get-child-node node 0) (vec3* position (vec3 2 2 2)) (vec3* size (vec3 2 2 2)))
+	  (let ((new-node (get-relative-node node (vec3-apply exact-floor position))))
+	    (set-payload node (cons (get-payload node) 
+				    (entity (vec3-apply (lambda (x) (- x (floor x))) position) 
+					    size)))
+	    new-node)))))
 
 
 (define p1 (create-node))
+(get-relative-node p1 (vec3-apply exact-floor (vec3 0.1 0 0)))
+(define l2 (add-entity p1 (vec3 0.1 0 0) (vec3 0.4 0.4 0.4)))
+(define c (find-common-parent l2 p1))
+(printf "C: ~a\n" c)
+(printf "~a\n" (map (lambda (x) (eq? c x)) (get-parent-tree l2)))
+(printf "~a\n" (map (lambda (x) (eq? c x)) (get-parent-tree p1)))
+(printf "eq: ~a\n" (eq? c  l2))
+(print (get-parent-offset l2 1 c))
+(exit 0)
+
 (define p2 (get-child-node p1 0))
 (define p3 (get-child-node p1 4))
 
@@ -152,27 +175,30 @@
 (set-payload p32 tile3)
 (define p33 (get-relative-node p3 (vec3 1 0 -1)))
 (set-payload p33 tile3)
+(define p34 (get-relative-node p3 (vec3 1 0 -2)))
+(set-payload p34 tile3)
 
-(printf "~a\n" (iso-offset (vec3 1 2 3)))
-(printf "~a\n" (get-parent-offset n1 24 p1))
+
+;(printf "~a\n" (iso-offset (vec3 1 2 3)))
+;(printf "~a\n" (get-parent-offset n1 24 p1))
 
 ;(exit)
 
 (new my-canvas% [parent frame]
      [paint-callback
       (lambda (canvas dc)
-	(send dc set-brush (send the-brush-list find-or-create-brush 
+	(send dc set-brush (send the-brush-list find-or-create-brush
 				 (make-object color% 0 0 0 0.2) 'transparent))
 	(let* ((p (get-parent (get-parent (get-parent (get-parent (get-parent (get-parent n1)))))))
 	       (pv (get-parent-offset n1 24 p))
 	       (o (iso-offset pv)))
 	  (render-node p (* 24 2 2 2 2 2 2)
-		       (lambda (node xyz s) 
+		       (lambda (node xyz s)
 			 (let ((im-v (iso-offset (vec3+ xyz pv)))
 			       (tile (get-payload node)))
 			   (unless (null? tile)
-				   (send dc draw-bitmap (sprite-image tile) 
-					 (+ (vec3-x im-v)  (sprite-x tile) 200) 
+				   (send dc draw-bitmap (sprite-image tile)
+					 (+ (vec3-x im-v) (sprite-x tile) 200)
 					 (+ (vec3-y im-v) (sprite-y tile) 200))
 				   )))
 	    )
