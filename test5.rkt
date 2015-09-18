@@ -39,7 +39,7 @@
 		(l2z (bitwise-and (+ lz z) 1)))
 	    (let ((nidx (+ l2x (* l2y 2) (* l2z 4))))
 	      (get-child-node nparent nidx))))))))
-(define (render-node node size f x y z)
+(define (render-node node size f (x 0) (y 0) (z 0))
   (f node x y z size)
   (let ((s (/ size 2)))
     ;;it: xz: (1 0) (0 0) (1 1) (1 0)
@@ -118,6 +118,24 @@
 (define tile2 (sprite (read-bitmap "tile2x.png") 0 -24));-75));(sprite (read-bitmap "tree.png") 0 -14))
 (define tile3 (sprite (read-bitmap "tile4x.png") 0 -48));-148))
 
+; simple tag-object
+; If its a game object it will have a local offset.
+; If it has a visual it will have a sprite attached
+(struct entity (position size))
+
+
+
+;; (define (add-entity node position size)
+;;   ;; Adds a new entity to the scene.
+;;   ;; movies it to the appropiate level of detail.
+;;   (if (ormap (lambda (x) (> x 1)) size)
+;;       (add-entity (get-parent node) (to-parent-coords position) (to-parent-size size))
+;;       (let ((new-node (apply relative-node node (map #'floor position))))
+;; 	(set-payload node (cons (get-payload node) (entity (map (lambda (x) (- x (floor x))) position) size)))
+;; 	new-node))
+;;   )
+;; (exit 0)
+
 (define p1 (create-node))
 (define p2 (get-child-node p1 0))
 (define p3 (get-child-node p1 4))
@@ -131,8 +149,11 @@
 (set-payload n1 tile) 
 (render-node p1 1 (lambda (node x y z s) (printf "~a\n" (list x y z s (get-payload node))))
 	     0 0 0)
+(define p32 (get-relative-node p3 1 0 0))
+(set-payload p32 tile3)
+(define p33 (get-relative-node p3 1 0 -1))
+(set-payload p33 tile3)
 
-;(exit)
 (new my-canvas% [parent frame]
      [paint-callback
       (lambda (canvas dc)
@@ -149,8 +170,7 @@
 				 (unless (null? tile)
 					 (send dc draw-bitmap (sprite-image tile) 
 					       (+ nx (sprite-x tile) 200) (+ ny (sprite-y tile) 200))
-					 ))))
-			 0 0 0)
+					 )))))
 	    )))
 	;(send dc draw-text "Dont panic" 0 0)
 	)])
