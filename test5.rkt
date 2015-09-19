@@ -98,29 +98,16 @@
 	(- (/ (vec3-z o) 2) (vec3-y o) (/ (vec3-x o) 2))
 	0))
 
-(define frame (new frame% [label "Example"] [width 512] [height 512]))  
-;(define msg (new message% [parent frame]))
-
-(define my-canvas%
-  (class canvas% ; The base class is canvas%
-    ; Define overriding method to handle mouse events
- ;   (define/override (on-event event)
- ;     (send msg set-label "Canvas mouse"))
-    ; Define overriding method to handle keyboard events
- ;   (define/override (on-char event)
- ;     (send msg set-label "Canvas keyboard"))
-    ; Call the superclass init, passing on all init args
-    (super-new)))
-
 (struct sprite (image x y))
 (define tile (sprite (read-bitmap "tile2.png") 0 -12));-37))
 (define tile2 (sprite (read-bitmap "tile2x.png") 0 -24));-75));(sprite (read-bitmap "tree.png") 0 -14))
 (define tile3 (sprite (read-bitmap "tile4x.png") 0 -48));-148))
+(define horsie (sprite (read-bitmap "horsie.png") 0 -5))
 
 ; simple tag-object
 ; If its a game object it will have a local offset.
 ; If it has a visual it will have a sprite attached
-(struct entity (position size))
+(struct entity (position size node) #:mutable)
 
 (define (to-parent-coords node coords)
   (let ((offset (index-to-offset (get-node-index node))))
@@ -128,33 +115,47 @@
 
 (define (to-parent-size size)
   (vec3/ size (vec3 2 2 2)))
-  
 
-(define (add-entity node position size)
+(define (add-entity node entity)
   ;; Adds a new entity to the scene.
   ;; movies it to the appropiate level of detail.
-  (let ((size-values (vec3-values size)))
+  (let* ((size (entity-size entity))
+	 (position (entity-position entity))
+	 (size-values (vec3-values size)))
     (if (ormap (lambda (x) (> x 1)) size-values)
-      (add-entity (get-parent node) (to-parent-coords node position) (to-parent-size size))
+	(begin
+	  (set-entity-position! entity (to-parent-coords node position))
+	  (set-entity-size! entity (to-parent-size size))
+	  (add-entity (get-parent node) entity))
       (if (andmap (lambda (x) (<= x 0.5)) size-values)
-	  (add-entity (get-child-node node 0) (vec3* position (vec3 2 2 2)) (vec3* size (vec3 2 2 2)))
+	  (begin
+	    (set-entity-position! entity (vec3* position (vec3 2 2 2)))
+	    (set-entity-size! entity (vec3* size (vec3 2 2 2)))
+	    (add-entity (get-child-node node 0) entity))
 	  (let ((new-node (get-relative-node node (vec3-apply exact-floor position))))
-	    (set-payload node (cons (get-payload node) 
-				    (entity (vec3-apply (lambda (x) (- x (floor x))) position) 
-					    size)))
-	    new-node)))))
+	    (set-entity-position! entity (vec3-apply (lambda (x) (- x (floor x))) position))
+	    (set-entity-node! entity new-node)
+	    (set-payload new-node (cons entity (get-payload new-node)))
+	    entity)))))
 
+(define (remove-entity entity)
+  (let ((node (entity-node entity)))
+    (set-payload node (remove entity (get-payload node)))
+    (set-entity-node! entity null)))
 
 (define p1 (create-node))
-(get-relative-node p1 (vec3-apply exact-floor (vec3 0.1 0 0)))
-(define l2 (add-entity p1 (vec3 0.1 0 0) (vec3 0.4 0.4 0.4)))
-(define c (find-common-parent l2 p1))
-(printf "C: ~a\n" c)
-(printf "~a\n" (map (lambda (x) (eq? c x)) (get-parent-tree l2)))
-(printf "~a\n" (map (lambda (x) (eq? c x)) (get-parent-tree p1)))
-(printf "eq: ~a\n" (eq? c  l2))
-(print (get-parent-offset l2 1 c))
-(exit 0)
+;; (get-relative-node p1 (vec3-apply exact-floor (vec3 0.1 0 0)))
+;; (define l2 (add-entity p1 (vec3 0.1 0 0) (vec3 0.4 0.4 0.4)))
+;; (add-entity p1 (vec3 0.2 0 0) (vec3 0.2 0.2 0.2))
+;; (define c (find-common-parent (entity-node l2) p1))
+;; (printf "C: ~a\n" c)
+;; (printf "~a\n" (map (lambda (x) (eq? c x)) (get-parent-tree (entity-node l2))))
+;; (printf "~a\n" (map (lambda (x) (eq? c x)) (get-parent-tree p1)))
+;; (printf "eq: ~a\n" (eq? c  l2))
+;; (print (get-parent-offset (entity-node l2) 1 c))
+;; (newline)
+;; (printf "Payload: ~a" (get-payload (entity-node l2)))
+;(exit 0)
 
 (define p2 (get-child-node p1 0))
 (define p3 (get-child-node p1 4))
@@ -166,10 +167,11 @@
 (set-payload p42 tile2)
 (define p5 (get-child-node p2 0))
 (define n1 (get-child-node p5 2))
-(set-payload n1 tile) 
+(set-payload n1 (list tile)) 
 
-(render-node p1 1 
-	     (lambda (node xyz s) (printf "~a\n" (list xyz s (get-payload node)))))
+(define sprite-table (make-weak-hash))
+
+(render-node p1 1 (lambda (node xyz s) (printf "~a\n" (list xyz s (get-payload node)))))
 
 (define p32 (get-relative-node p3 (vec3 1 0 0)))
 (set-payload p32 tile3)
@@ -177,30 +179,64 @@
 (set-payload p33 tile3)
 (define p34 (get-relative-node p3 (vec3 1 0 -2)))
 (set-payload p34 tile3)
-
+(define e1 (add-entity n1 (entity (vec3 1 2/10 0) (vec3 1 1 1) null)))
+(hash-set! sprite-table e1 horsie)
 
 ;(printf "~a\n" (iso-offset (vec3 1 2 3)))
 ;(printf "~a\n" (get-parent-offset n1 24 p1))
 
 ;(exit)
+(define frame (new frame% [label "Example"] [width 512] [height 512]))  
+;(define msg (new message% [parent frame]))
+
+(define my-canvas%
+  (class canvas% ; The base class is canvas%
+    ; Define overriding method to handle mouse events
+ ;   (define/override (on-event event)
+ ;     (send msg set-label "Canvas mouse"))
+    ; Define overriding method to handle keyboard events
+    (define/override (on-char event)
+      (send this refresh-now)
+      ;(send msg set-label "Canvas keyboard")
+      )
+    ; Call the superclass init, passing on all init args
+    (super-new)))
 
 (new my-canvas% [parent frame]
      [paint-callback
       (lambda (canvas dc)
 	(send dc set-brush (send the-brush-list find-or-create-brush
-				 (make-object color% 0 0 0 0.2) 'transparent))
-	(let* ((p (get-parent (get-parent (get-parent (get-parent (get-parent (get-parent n1)))))))
-	       (pv (get-parent-offset n1 24 p))
+				 (make-object color% 0 0 0 1) 'solid))
+	(send canvas set-canvas-background (make-object color% 0 0 0 1))
+	(let ((node (entity-node e1)))
+	  (remove-entity e1)
+	  (set-entity-position! e1 (vec3+ (entity-position e1) (vec3 0 0 1/20)))
+	  (add-entity node e1))
+	
+
+	(let* ((p (get-parent (get-parent (get-parent (get-parent (get-parent (get-parent (entity-node e1))))))))
+	       (pv (get-parent-offset (entity-node e1) 24 p))
 	       (o (iso-offset pv)))
 	  (render-node p (* 24 2 2 2 2 2 2)
 		       (lambda (node xyz s)
-			 (let ((im-v (iso-offset (vec3+ xyz pv)))
+			 (let ((im-v (iso-offset (vec3+ xyz pv (vec3-apply (lambda (x) (* x 24 -1)) (entity-position e1)))))
 			       (tile (get-payload node)))
 			   (unless (null? tile)
-				   (send dc draw-bitmap (sprite-image tile)
-					 (+ (vec3-x im-v) (sprite-x tile) 200)
-					 (+ (vec3-y im-v) (sprite-y tile) 200))
-				   )))
+				   (let ((lst (if (pair? tile) tile (cons tile null))))
+				     (for ([i lst])
+					  (when (sprite? i)
+						(send dc draw-bitmap (sprite-image i)
+						      (+ (vec3-x im-v) (sprite-x i) 200)
+						      (+ (vec3-y im-v) (sprite-y i) 200)))
+					  (when (entity? i)
+						(let ((sp (hash-ref sprite-table e1 horsie)))
+						  (unless (null? sp)
+							  (let ((offset (vec3+ im-v (iso-offset (vec3-apply (lambda (x) (* x s)) (entity-position i))))))
+							    (send dc draw-bitmap (sprite-image sp)
+								  (+ (vec3-x offset) (sprite-x sp) 200)
+								  (+ (vec3-y offset) (sprite-y sp) 200)))
+							  (printf "Entity! ~a ~a\n" (entity-size i) (entity-position i)))))
+				   )))))
 	    )
 	  ))
 	;(send dc draw-text "Dont panic" 0 0)
