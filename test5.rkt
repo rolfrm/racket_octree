@@ -112,21 +112,20 @@
     (let ((collision (and (< (vec3-x position) 1)
 			  (< (vec3-y position) 1)
 			  (< (vec3-z position) 1)
-			  (>= (vec3-x stop) 0)
-			  (>= (vec3-y stop) 0)
-			  (>= (vec3-z stop) 0))))
+			  (> (vec3-x stop) 0)
+			  (> (vec3-y stop) 0)
+			  (> (vec3-z stop) 0))))
 
       (when collision
 	    (cb node position size)
-	    (let ((child-size (vec3* size (vec3 2 2 2))))
-	      (for ([i (in-range 8)]
-		    #:when (and (not (eq? i idx)) 
-				(has-child-node node i))
-		    )
+	    (for ([i (in-range 8)]
+		  #:when (and (not (eq? i idx)) 
+			      (has-child-node node i))
+		  )
 		   (let ((offset (index-to-offset i)))
 		     (lookup-blocks (get-child-node node i) 
 				    (to-child-coords2 offset position) 
-				    (to-child-size child-size) cb -2)))))))
+				    (to-child-size size) cb -2))))))
   (when (and (not (eq? idx -2)) 
 	     (has-parent node))
 	(let ((idx2 (get-node-index node)))
@@ -154,7 +153,7 @@
 (define tile (sprite (read-bitmap "tile2.png") 0 -37));-37))
 (define tile2 (sprite (read-bitmap "tile2x.png") 0 -75));-75));(sprite (read-bitmap "tree.png") 0 -14))
 (define tile3 (sprite (read-bitmap "tile4x.png") 0 -150));-148))
-(define horsie (sprite (read-bitmap "horsie.png") 0 -20))
+(define horsie (sprite (read-bitmap "horsie.png") 0 -25))
 
 ; simple tag-object
 ; If its a game object it will have a local offset.
@@ -225,8 +224,8 @@
 ;(set-payload p33 tile3)
 (define p34 (get-relative-node p3 (vec3 1 0 -2)))
 ;(set-payload p34 tile3)
-(define e1 (add-entity n1 (entity (vec3 0 5 22/8) (vec3 6/10 6/10 6/10) null)))
-(hash-set! sprite-table e1 tile)
+(define e1 (add-entity n1 (entity (vec3 0 5 1) (vec3 1 1 1) null)))
+(hash-set! sprite-table e1 horsie)
 
 ;(printf "~a\n" (iso-offset (vec3 1 2 3)))
 ;(printf "~a\n" (get-parent-offset n1 24 p1))
@@ -246,11 +245,15 @@
       
     (define/override (on-char event)
       (case (send event get-key-code)
-	['up (set! dir   (vec3 0 1 0))]
-	['down (set! dir (vec3 0 -1 0))]
+	['up (set! dir   (vec3 1 0 0))]
+	['down (set! dir (vec3 -1 0 0))]
 	['left (set! dir (vec3 0 0 -1))]
 	['right (set! dir (vec3 0 0 1))]
+	['#\w (set! dir (vec3 0 1 0))]
+	['#\s (set! dir (vec3 0 -1 0))]
 	[else (set! dir (vec3 0 0 0))])
+      (when (char? (send event get-key-code))
+	    (printf "~a\n" (char->integer (send event get-key-code))))
       (send this refresh-now)
       ;(send msg set-label "Canvas keyboard")
       )
@@ -266,7 +269,7 @@
 	(let ((node (entity-node e1)))
 	  (remove-entity e1)	  
 	  (let ((ep (entity-position e1)))
-	    (let ((np (vec3+ ep (send canvas get-dir)))
+	    (let ((np (vec3+ ep (vec3-apply (lambda (x) (/ x 10)) (send canvas  get-dir))))
 		  (collides false))
 	      (lookup-blocks node np (entity-size e1) 
 			   (lambda (n p s) 
