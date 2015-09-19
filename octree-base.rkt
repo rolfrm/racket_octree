@@ -50,7 +50,7 @@
   (when (null? (node-sub-nodes parent))
 	(set-node-sub-nodes! parent (make-vector 8 null)))
   (let ((current-value (vector-ref (node-sub-nodes parent) idx)))
-    (if (or (null? current-value) (not current-value))
+    (if (or (null? current-value) (not (weak-box-value current-value)))
 	(let ((new-value (node null parent null)))
 	  (vector-set! (node-sub-nodes parent) idx (make-weak-box new-value))
 	  new-value)

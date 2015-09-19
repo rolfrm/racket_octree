@@ -24,13 +24,14 @@
   (floor (/ x y)))
 
 (define (index-to-offset idx)
-  (let ((lx (bitwise-bit-field idx 0 1))
-	(ly (bitwise-bit-field idx 1 2))
-	(lz (bitwise-bit-field idx 2 3)))
-    (vec3 lx ly lz)))
+  (vec3 (bitwise-bit-field idx 0 1)
+	(bitwise-bit-field idx 1 2)
+	(bitwise-bit-field idx 2 3)))
 
 (define (offset-to-index offset)
-  (+ (vec3-x offset) (* (vec3-y offset) 2) (* (vec3-z offset) 4)))
+  (+ (vec3-x offset) 
+     (* (vec3-y offset) 2) 
+     (* (vec3-z offset) 4)))
 
 (define (get-relative-node node v)
   (let ((idx (get-node-index node)))
@@ -85,6 +86,61 @@
 	       [b tb]
 	       #:when (equal? a b))
 	      a)))
+(define (to-parent-coords2 idx coords)
+  (let ((offset (index-to-offset idx)))
+    (vec3-apply (lambda (x) (/ x 2))  (vec3+ offset coords coords))))
+
+(define (to-parent-coords node coords)
+  (let ((offset (index-to-offset (get-node-index node))))
+    (vec3-apply (lambda (x) (/ x 2))  (vec3+ offset coords coords))))
+
+(define (to-parent-size size)
+  (vec3/ size (vec3 2 2 2)))
+
+(define (to-child-size size)
+  (vec3* size (vec3 2 2 2)))
+
+(define (to-child-coords2 offset coords)
+  (vec3* (vec3- coords offset) (vec3 2 2 2)))
+
+(define (lookup-blocks node position size cb (idx -1))
+  ;; Finds all blocks that collides with block
+  ;; and contains a payload
+  ;; idx == -2 means its going down.
+  ;; idx == -1 means it has just started.
+  ;; This is to avoid it iterating between child and parent.
+  (let ((stop (vec3+ position size)))
+    ;(printf ">>~a ~a\n" position stop)
+    (let ((collision (and (< (vec3-x position) 1)
+			  (< (vec3-y position) 1)
+			  (< (vec3-z position) 1)
+			  (>= (vec3-x stop) 0)
+			  (>= (vec3-y stop) 0)
+			  (>= (vec3-z stop) 0))))
+
+      (when collision
+	    ;(printf "COLLISION\n")
+	    (cb node position size)
+	    (let ((child-size (vec3* size (vec3 2 2 2))))
+	      (for ([i (in-range 8)]
+		    #:when (and (not (eq? i idx)) 
+				(has-child-node node i))
+		    )
+		   (let ((offset (index-to-offset i)))
+		     ;(printf "Going down\n")
+		     (lookup-blocks (get-child-node node i) 
+				    (to-child-coords2 offset position) 
+				    (to-child-size child-size) cb -2)))))))
+  (when (and (not (eq? idx -2)) 
+	     (has-parent node))
+	(let ((idx2 (get-node-index node)))
+	  ;(printf "Going up\n")
+	  (lookup-blocks (get-parent node) (to-parent-coords2 idx position) (to-parent-size size) cb idx2)
+	  )))
+			     
+		     
+		 
+		 
 
 ;; Base item size should never change as this will decrease visual quality.
 ;; Since its isometric there is a mismatch between the way stuff is understood
@@ -109,12 +165,6 @@
 ; If it has a visual it will have a sprite attached
 (struct entity (position size node) #:mutable)
 
-(define (to-parent-coords node coords)
-  (let ((offset (index-to-offset (get-node-index node))))
-    (vec3-apply (lambda (x) (/ x 2))  (vec3- offset coords))))
-
-(define (to-parent-size size)
-  (vec3/ size (vec3 2 2 2)))
 
 (define (add-entity node entity)
   ;; Adds a new entity to the scene.
@@ -179,8 +229,8 @@
 (set-payload p33 tile3)
 (define p34 (get-relative-node p3 (vec3 1 0 -2)))
 (set-payload p34 tile3)
-(define e1 (add-entity n1 (entity (vec3 1 2/10 0) (vec3 1 1 1) null)))
-(hash-set! sprite-table e1 horsie)
+(define e1 (add-entity n1 (entity (vec3 0 5 0) (vec3 1 1 1) null)))
+(hash-set! sprite-table e1 tile)
 
 ;(printf "~a\n" (iso-offset (vec3 1 2 3)))
 ;(printf "~a\n" (get-parent-offset n1 24 p1))
@@ -210,8 +260,26 @@
 	(send canvas set-canvas-background (make-object color% 0 0 0 1))
 	(let ((node (entity-node e1)))
 	  (remove-entity e1)
-	  (set-entity-position! e1 (vec3+ (entity-position e1) (vec3 0 0 1/20)))
-	  (add-entity node e1))
+	  (let ((ep (entity-position e1)))
+	    (let ((np (vec3+ ep (vec3 0 -1/10 0)))
+		  (collides false))
+	      (lookup-blocks node np (entity-size e1) 
+			   (lambda (n p s) 
+			     (unless 
+			      (null? (get-payload n)) 
+			      (set! collides true)
+			      (printf "Collision with: ~a ~a ~a ~a\n" (get-payload n) p s ep)
+			      )))
+	      (unless collides
+		      (set-entity-position! e1 np))
+	    ;; Apply gravity. First check if there is a block below.
+	    ;(let ((gp (vec3- ep (vec3 0 0.1 0))))
+	    ;  (for ([blk (lookup-blocks node gp (entity-size))]
+	      (newline)
+	    
+	  
+	      (add-entity node e1)
+	      )))
 	
 
 	(let* ((p (get-parent (get-parent (get-parent (get-parent (get-parent (get-parent (entity-node e1))))))))
