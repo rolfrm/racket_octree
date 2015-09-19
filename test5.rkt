@@ -88,11 +88,10 @@
 	      a)))
 (define (to-parent-coords2 idx coords)
   (let ((offset (index-to-offset idx)))
-    (vec3-apply (lambda (x) (/ x 2))  (vec3+ offset coords coords))))
+    (vec3-apply (lambda (x) (/ x 2))  (vec3+ offset coords))))
 
 (define (to-parent-coords node coords)
-  (let ((offset (index-to-offset (get-node-index node))))
-    (vec3-apply (lambda (x) (/ x 2))  (vec3+ offset coords coords))))
+  (to-parent-coords2 (get-node-index node) coords))
 
 (define (to-parent-size size)
   (vec3/ size (vec3 2 2 2)))
@@ -101,7 +100,7 @@
   (vec3* size (vec3 2 2 2)))
 
 (define (to-child-coords2 offset coords)
-  (vec3* (vec3- coords offset) (vec3 2 2 2)))
+  (vec3- (vec3* coords (vec3 2 2 2)) offset))
 
 (define (lookup-blocks node position size cb (idx -1))
   ;; Finds all blocks that collides with block
@@ -110,7 +109,6 @@
   ;; idx == -1 means it has just started.
   ;; This is to avoid it iterating between child and parent.
   (let ((stop (vec3+ position size)))
-    ;(printf ">>~a ~a\n" position stop)
     (let ((collision (and (< (vec3-x position) 1)
 			  (< (vec3-y position) 1)
 			  (< (vec3-z position) 1)
@@ -119,7 +117,6 @@
 			  (>= (vec3-z stop) 0))))
 
       (when collision
-	    ;(printf "COLLISION\n")
 	    (cb node position size)
 	    (let ((child-size (vec3* size (vec3 2 2 2))))
 	      (for ([i (in-range 8)]
@@ -127,15 +124,14 @@
 				(has-child-node node i))
 		    )
 		   (let ((offset (index-to-offset i)))
-		     ;(printf "Going down\n")
 		     (lookup-blocks (get-child-node node i) 
 				    (to-child-coords2 offset position) 
 				    (to-child-size child-size) cb -2)))))))
   (when (and (not (eq? idx -2)) 
 	     (has-parent node))
 	(let ((idx2 (get-node-index node)))
-	  ;(printf "Going up\n")
-	  (lookup-blocks (get-parent node) (to-parent-coords2 idx position) (to-parent-size size) cb idx2)
+	  (lookup-blocks (get-parent node) (to-parent-coords2 idx2 position) 
+			 (to-parent-size size) cb idx2)
 	  )))
 			     
 		     
@@ -155,10 +151,10 @@
 	0))
 
 (struct sprite (image x y))
-(define tile (sprite (read-bitmap "tile2.png") 0 -12));-37))
-(define tile2 (sprite (read-bitmap "tile2x.png") 0 -24));-75));(sprite (read-bitmap "tree.png") 0 -14))
-(define tile3 (sprite (read-bitmap "tile4x.png") 0 -48));-148))
-(define horsie (sprite (read-bitmap "horsie.png") 0 -5))
+(define tile (sprite (read-bitmap "tile2.png") 0 -37));-37))
+(define tile2 (sprite (read-bitmap "tile2x.png") 0 -75));-75));(sprite (read-bitmap "tree.png") 0 -14))
+(define tile3 (sprite (read-bitmap "tile4x.png") 0 -150));-148))
+(define horsie (sprite (read-bitmap "horsie.png") 0 -20))
 
 ; simple tag-object
 ; If its a game object it will have a local offset.
@@ -177,7 +173,7 @@
 	  (set-entity-position! entity (to-parent-coords node position))
 	  (set-entity-size! entity (to-parent-size size))
 	  (add-entity (get-parent node) entity))
-      (if (andmap (lambda (x) (<= x 0.5)) size-values)
+      (if (andmap (lambda (x) (<= x 1/2)) size-values)
 	  (begin
 	    (set-entity-position! entity (vec3* position (vec3 2 2 2)))
 	    (set-entity-size! entity (vec3* size (vec3 2 2 2)))
@@ -217,19 +213,19 @@
 (set-payload p42 tile2)
 (define p5 (get-child-node p2 0))
 (define n1 (get-child-node p5 2))
-(set-payload n1 (list tile)) 
+;(set-payload n1 (list tile)) 
 
 (define sprite-table (make-weak-hash))
 
 (render-node p1 1 (lambda (node xyz s) (printf "~a\n" (list xyz s (get-payload node)))))
 
 (define p32 (get-relative-node p3 (vec3 1 0 0)))
-(set-payload p32 tile3)
+;(set-payload p32 tile3)
 (define p33 (get-relative-node p3 (vec3 1 0 -1)))
-(set-payload p33 tile3)
+;(set-payload p33 tile3)
 (define p34 (get-relative-node p3 (vec3 1 0 -2)))
-(set-payload p34 tile3)
-(define e1 (add-entity n1 (entity (vec3 0 5 0) (vec3 1 1 1) null)))
+;(set-payload p34 tile3)
+(define e1 (add-entity n1 (entity (vec3 0 5 22/8) (vec3 6/10 6/10 6/10) null)))
 (hash-set! sprite-table e1 tile)
 
 ;(printf "~a\n" (iso-offset (vec3 1 2 3)))
@@ -245,7 +241,16 @@
  ;   (define/override (on-event event)
  ;     (send msg set-label "Canvas mouse"))
     ; Define overriding method to handle keyboard events
+    (define dir (vec3 0 0 0))
+    (define/public (get-dir) dir)
+      
     (define/override (on-char event)
+      (case (send event get-key-code)
+	['up (set! dir   (vec3 0 1 0))]
+	['down (set! dir (vec3 0 -1 0))]
+	['left (set! dir (vec3 0 0 -1))]
+	['right (set! dir (vec3 0 0 1))]
+	[else (set! dir (vec3 0 0 0))])
       (send this refresh-now)
       ;(send msg set-label "Canvas keyboard")
       )
@@ -259,26 +264,32 @@
 				 (make-object color% 0 0 0 1) 'solid))
 	(send canvas set-canvas-background (make-object color% 0 0 0 1))
 	(let ((node (entity-node e1)))
-	  (remove-entity e1)
+	  (remove-entity e1)	  
 	  (let ((ep (entity-position e1)))
-	    (let ((np (vec3+ ep (vec3 0 -1/10 0)))
+	    (let ((np (vec3+ ep (send canvas get-dir)))
 		  (collides false))
 	      (lookup-blocks node np (entity-size e1) 
 			   (lambda (n p s) 
 			     (unless 
 			      (null? (get-payload n)) 
 			      (set! collides true)
+			      ;(set-payload n null)
 			      (printf "Collision with: ~a ~a ~a ~a\n" (get-payload n) p s ep)
 			      )))
+	  
 	      (unless collides
-		      (set-entity-position! e1 np))
+
+		      (set-entity-position! e1 np)
+
+		      )
+	      (add-entity node e1)
 	    ;; Apply gravity. First check if there is a block below.
 	    ;(let ((gp (vec3- ep (vec3 0 0.1 0))))
 	    ;  (for ([blk (lookup-blocks node gp (entity-size))]
 	      (newline)
 	    
 	  
-	      (add-entity node e1)
+	      
 	      )))
 	
 
