@@ -1,12 +1,5 @@
 #lang racket/gui
 (require racket/gui/base)
-(define (parse-number s)
-  (cond
-   [(equal? "1" s) 1]
-   [(equal? "2" s) 2]
-   [else 0]))
-
-(parse-number "1")
 
 (require "octree-base.rkt")
 (require "vec3.rkt")
@@ -20,8 +13,7 @@
 	       i)
     ))
 
-(define (int-div x y)
-  (floor (/ x y)))
+(define int-div (compose floor /))
 
 (define (index-to-offset idx)
   (vec3 (bitwise-bit-field idx 0 1)
@@ -46,7 +38,7 @@
 	  (let ((l2 (vec3-fold bitwise-and (list (vec3+ v vi) (vec3 1 1 1)))))
 	    (get-child-node nparent (offset-to-index l2))))))))
 
-
+;; do a layered approach instead.
 (define (render-node node size f (v (vec3 0 0 0)))
   (f node v size)
   (let ((s (/ size 2)))
@@ -93,11 +85,8 @@
 (define (to-parent-coords node coords)
   (to-parent-coords2 (get-node-index node) coords))
 
-(define (to-parent-size size)
-  (vec3/ size (vec3 2 2 2)))
-
-(define (to-child-size size)
-  (vec3* size (vec3 2 2 2)))
+(define to-parent-size (curryr vec3/ (vec3 2 2 2)))
+(define to-child-size (curry vec3* (vec3 2 2 2)))
 
 (define (to-child-coords2 offset coords)
   (vec3- (vec3* coords (vec3 2 2 2)) offset))
@@ -150,15 +139,18 @@
 	0))
 
 (struct sprite (image x y))
-(define tile (sprite (read-bitmap "tile2.png") 0 -37));-37))
-(define tile2 (sprite (read-bitmap "tile2x.png") 0 -75));-75));(sprite (read-bitmap "tree.png") 0 -14))
-(define tile3 (sprite (read-bitmap "tile4x.png") 0 -150));-148))
-(define horsie (sprite (read-bitmap "horsie.png") 0 -25))
+(define tile (sprite (read-bitmap "tile22.png") 0 -40));-37))
+(define tile2 (sprite (read-bitmap "tile2x2.png") 0 -76));-75));(sprite (read-bitmap "tree.png") 0 -14))
+(define tile5 (sprite (read-bitmap "tile2x2slant.png") 0 -78))
+(define tile3 (sprite (read-bitmap "tile4x2.png") 0 -150));-148))
+(define tile4 (sprite (read-bitmap "tile4x22.png") 0 -150))
+(define horsie (sprite (read-bitmap "horsie.png") 0 -15))
 
 ; simple tag-object
 ; If its a game object it will have a local offset.
 ; If it has a visual it will have a sprite attached
-(struct entity (position size node) #:mutable)
+(struct entity (position size node satelites) #:mutable)
+(struct satelite-entity (offset origin node))
 
 
 (define (add-entity node entity)
@@ -188,6 +180,19 @@
     (set-payload node (remove entity (get-payload node)))
     (set-entity-node! entity null)))
 
+(define (remove-satelite sat)
+  (let ((entity (satelite-entity-origin sat))
+	(node (satelite-entity-node sat)))
+    (set-entity-satelites! entity (remove sat (entity-satelites entity)))
+    (set-payload node (remove sat (get-payload node)))
+    ))
+
+(define (add-satelite entity position node)
+  (let ((sat (satelite-entity position entity node)))
+    (set-entity-satelites! entity (cons sat (entity-satelites entity)))
+    (set-payload node (cons sat (get-payload node)))
+    ))
+
 (define p1 (create-node))
 ;; (get-relative-node p1 (vec3-apply exact-floor (vec3 0.1 0 0)))
 ;; (define l2 (add-entity p1 (vec3 0.1 0 0) (vec3 0.4 0.4 0.4)))
@@ -205,32 +210,34 @@
 (define p2 (get-child-node p1 0))
 (define p3 (get-child-node p1 4))
 
-(set-payload p3 tile3)
+;(set-payload p3 tile3)
 (define p4 (get-child-node p2 0))
-(set-payload p4 tile2)
+;(set-payload p4 tile2)
 (define p42 (get-child-node p2 4))
-(set-payload p42 tile2)
+(set-payload p42 (list tile2))
+(define p43 (get-relative-node p42 (vec3 1 0 0)))
+(set-payload p43 (list tile2))
+(define p44 (get-relative-node p43 (vec3 0 1 0)))
+(set-payload p44 (list tile5))
 (define p5 (get-child-node p2 0))
 (define n1 (get-child-node p5 2))
-;(set-payload n1 (list tile)) 
+(define n2 (get-relative-node n1 (vec3 0 0 1)))
+(set-payload n1 (list tile)) 
+(set-payload n2 (list tile)) 
 
 (define sprite-table (make-weak-hash))
 
-(render-node p1 1 (lambda (node xyz s) (printf "~a\n" (list xyz s (get-payload node)))))
-
 (define p32 (get-relative-node p3 (vec3 1 0 0)))
-;(set-payload p32 tile3)
+(set-payload p32 (list tile3))
 (define p33 (get-relative-node p3 (vec3 1 0 -1)))
-;(set-payload p33 tile3)
+(define p35 (get-relative-node p3 (vec3 2 0 -1)))
+(set-payload p33 (list tile3))
+(set-payload p35 (list tile4))
 (define p34 (get-relative-node p3 (vec3 1 0 -2)))
 ;(set-payload p34 tile3)
-(define e1 (add-entity n1 (entity (vec3 0 5 1) (vec3 1 1 1) null)))
+(define e1 (add-entity n1 (entity (vec3 0 5 1) (vec3 0.2 0.5 0.8) null null)))
 (hash-set! sprite-table e1 horsie)
 
-;(printf "~a\n" (iso-offset (vec3 1 2 3)))
-;(printf "~a\n" (get-parent-offset n1 24 p1))
-
-;(exit)
 (define frame (new frame% [label "Example"] [width 512] [height 512]))  
 ;(define msg (new message% [parent frame]))
 
@@ -265,40 +272,43 @@
       (lambda (canvas dc)
 	(send dc set-brush (send the-brush-list find-or-create-brush
 				 (make-object color% 0 0 0 1) 'solid))
-	(send canvas set-canvas-background (make-object color% 0 0 0 1))
+	(send canvas set-canvas-background (make-object color% 200 200 255 1))
+	(printf "Sats: ~a\n" (entity-satelites e1))
+	(for ([sat (entity-satelites e1)])
+
+	     (remove-satelite sat))
 	(let ((node (entity-node e1)))
 	  (remove-entity e1)	  
-	  (let ((ep (entity-position e1)))
+	  (let ((ep (entity-position e1))
+		(es (entity-size e1)))
 	    (let ((np (vec3+ ep (vec3-apply (lambda (x) (/ x 10)) (send canvas  get-dir))))
 		  (collides false))
 	      (lookup-blocks node np (entity-size e1) 
 			   (lambda (n p s) 
-			     (unless 
-			      (null? (get-payload n)) 
-			      (set! collides true)
+			     (begin
+			       (when (and (equal? s es)
+					  (not (equal? p ep)))
+				     (add-satelite e1 p n)
+				     (printf "Collision with: ~a ~a ~a ~a\n" s es p ep))
+			       (for ([i2 (get-payload n)]
+				     #:when (sprite? i2))
+				    (set! collides true))
 			      ;(set-payload n null)
-			      (printf "Collision with: ~a ~a ~a ~a\n" (get-payload n) p s ep)
-			      )))
+			      
+				)))
 	  
-	      (unless collides
-
-		      (set-entity-position! e1 np)
-
-		      )
+	      (unless collides (set-entity-position! e1 np))
 	      (add-entity node e1)
 	    ;; Apply gravity. First check if there is a block below.
 	    ;(let ((gp (vec3- ep (vec3 0 0.1 0))))
 	    ;  (for ([blk (lookup-blocks node gp (entity-size))]
-	      (newline)
-	    
-	  
-	      
 	      )))
 	
 
 	(let* ((p (get-parent (get-parent (get-parent (get-parent (get-parent (get-parent (entity-node e1))))))))
 	       (pv (get-parent-offset (entity-node e1) 24 p))
 	       (o (iso-offset pv)))
+	  (newline)
 	  (render-node p (* 24 2 2 2 2 2 2)
 		       (lambda (node xyz s)
 			 (let ((im-v (iso-offset (vec3+ xyz pv (vec3-apply (lambda (x) (* x 24 -1)) (entity-position e1)))))
@@ -314,10 +324,22 @@
 						(let ((sp (hash-ref sprite-table e1 horsie)))
 						  (unless (null? sp)
 							  (let ((offset (vec3+ im-v (iso-offset (vec3-apply (lambda (x) (* x s)) (entity-position i))))))
-							    (send dc draw-bitmap (sprite-image sp)
-								  (+ (vec3-x offset) (sprite-x sp) 200)
-								  (+ (vec3-y offset) (sprite-y sp) 200)))
+							 1   ;(send dc draw-bitmap (sprite-image sp)
+							;	  (+ (vec3-x offset) (sprite-x sp) 200)
+							;	  (+ (vec3-y offset) (sprite-y sp) 200))
+							    )
 							  (printf "Entity! ~a ~a\n" (entity-size i) (entity-position i)))))
+					  (when (satelite-entity? i)
+						(let ((entity (satelite-entity-origin i)))
+						  (printf "Sat ent\n")
+						  (let ((sp (hash-ref sprite-table entity horsie)))
+						    (unless (null? sp)
+							    (let ((offset (vec3+ im-v (iso-offset (vec3-apply (lambda (x) (* x s)) (satelite-entity-offset i))))))
+							      (send dc draw-bitmap (sprite-image sp)
+								    (+ (vec3-x offset) (sprite-x sp) 200)
+								    (+ (vec3-y offset) (sprite-y sp) 200)))
+							  ;(printf "Entity! ~a ~a\n" (entity-size i) (entity-position i))
+							  ))))
 				   )))))
 	    )
 	  ))
