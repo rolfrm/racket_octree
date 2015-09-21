@@ -144,7 +144,7 @@
 (define tile5 (sprite (read-bitmap "tile2x2slant.png") 0 -78))
 (define tile3 (sprite (read-bitmap "tile4x2.png") 0 -148));-148))
 (define tile4 (sprite (read-bitmap "tile4x22.png") 0 -148))
-(define horsie (sprite (read-bitmap "horsie.png") 0 -15))
+(define horsie (sprite (read-bitmap "horsie.png") 0 -20))
 
 ; simple tag-object
 ; If its a game object it will have a local offset.
@@ -235,8 +235,8 @@
 (set-payload p35 (list tile4))
 (define p34 (get-relative-node p3 (vec3 1 0 -2)))
 ;(set-payload p34 tile3)
-(define e1 (add-entity (get-relative-node n1 (vec3 8 -2 2)) (entity (vec3 0 5 1) (vec3 1 1 1) null null)));(vec3 0.2 0.5 0.8) null null)))
-(hash-set! sprite-table e1 tile  )
+(define e1 (add-entity (get-relative-node n1 (vec3 8 -2 2)) (entity (vec3 0 5 1) (vec3 0.2 0.5 0.8) null null)));(vec3 0.2 0.5 0.8) null null)))
+(hash-set! sprite-table e1 horsie  )
 
 (define frame (new frame% [label "Example"] [width 512] [height 512]))  
 ;(define msg (new message% [parent frame]))
