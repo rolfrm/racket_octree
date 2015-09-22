@@ -24,19 +24,18 @@
 (provide (contract-out
 	 [get-child-node (-> node? integer? node?)]
 	 [has-child-node (-> node? integer? boolean?)]
-	 [get-parent (-> node? node?)]	    
-	 [has-parent (-> node? boolean?)]
-	 [get-payload (-> node? any/c)]
-	 [set-payload (-> node? any/c void)]
+	 [get-parent-node (-> node? node?)]	    
+	 [has-parent-node (-> node? boolean?)]
+	 [get-node-payload (-> node? any/c)]
+	 [set-node-payload! (-> node? any/c void)]
 	 [create-node (->* ()(any/c) node?)]
 	 ))
 
 (define (create-node [payload null]) 
   (node null null payload))
 
-(define get-payload node-payload)
-(define set-payload set-node-payload!)
-(define (get-parent item)
+(define get-node-payload node-payload)
+(define (get-parent-node item)
   (if (null? (node-parent item))
       (let ((new-parent (node (make-vector 8 null) null null)))
 	(vector-set! (node-sub-nodes new-parent) (* 7 (random 2)) (make-weak-box item))
@@ -44,7 +43,7 @@
 	new-parent)
       (node-parent item)))
 
-(define has-parent (compose not null? node-parent))
+(define has-parent-node (compose not null? node-parent))
 
 (define (get-child-node parent idx)
   (when (null? (node-sub-nodes parent))
